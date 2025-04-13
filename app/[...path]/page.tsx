@@ -3,7 +3,16 @@ import DriveInterface from "@/components/drive-interface";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
 
-export default function Home() {
+interface PathPageProps {
+  params: {
+    path: string[];
+  };
+}
+
+export default function PathPage({ params }: PathPageProps) {
+  // Convert the path array to a string path
+  const pathString = params.path.join('/');
+
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-10">
       <div className="w-full max-w-7xl mx-auto space-y-6">
@@ -19,10 +28,10 @@ export default function Home() {
             <Loading message="Loading file manager..." />
           </div>
         }>
-          <DriveInterface initialPath="" />
+          <DriveInterface initialPath={pathString} />
         </Suspense>
       </div>
       <Toaster />
     </main>
   );
-}
+} 
