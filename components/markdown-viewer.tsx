@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loading } from "@/components/ui/loading";
-import { AlertCircle, Download, FileText } from "lucide-react";
+import { AlertCircle, Download, FileText, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 interface MarkdownViewerProps {
   isOpen: boolean;
@@ -80,6 +81,46 @@ export function MarkdownViewer({ isOpen, onOpenChange, url, fileName }: Markdown
 
   const renderFormattedContent = (text: string) => {
     return text.split('\n').map((line, index) => {
+      // Handle direct image links starting with @
+      if (line.startsWith('@http')) {
+        const imageUrl = line.slice(1);
+        return (
+          <div key={index} className="my-4 flex flex-col items-center">
+            <div className="relative w-full max-w-2xl aspect-square">
+              <Image
+                src={imageUrl}
+                alt="Content image"
+                fill
+                className="object-contain"
+                unoptimized // For external images
+              />
+            </div>
+          </div>
+        );
+      }
+
+      // Handle markdown image syntax
+      if (line.match(/!\[(.*?)\]\((.*?)\)/)) {
+        const match = line.match(/!\[(.*?)\]\((.*?)\)/);
+        if (match) {
+          const [, alt, imageUrl] = match;
+          return (
+            <div key={index} className="my-4 flex flex-col items-center">
+              <div className="relative w-full max-w-2xl aspect-square">
+                <Image
+                  src={imageUrl}
+                  alt={alt || "Content image"}
+                  fill
+                  className="object-contain"
+                  unoptimized // For external images
+                />
+              </div>
+              {alt && <p className="text-sm text-muted-foreground mt-2">{alt}</p>}
+            </div>
+          );
+        }
+      }
+
       // Handle headers
       if (line.startsWith('# ')) {
         return <h1 key={index} className="text-3xl font-bold my-4">{line.slice(2)}</h1>;

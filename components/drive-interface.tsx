@@ -349,9 +349,52 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     }
   };
 
+  const validateFileName = (fileName: string): { isValid: boolean; message?: string } => {
+    // Remove any leading or trailing slashes
+    const cleanedName = fileName.replace(/^\/+|\/+$/g, '');
+    
+    // Check if the name contains any invalid characters
+    const invalidChars = /[<>:"|?*\x00-\x1f]/;
+    if (invalidChars.test(cleanedName)) {
+      return { 
+        isValid: false, 
+        message: "File name contains invalid characters. Avoid: < > : \" | ? *" 
+      };
+    }
+
+    // Check if the name starts with a dot
+    if (cleanedName.startsWith('.')) {
+      return { 
+        isValid: false, 
+        message: "File name cannot start with a dot (.)" 
+      };
+    }
+
+    // Check if the name is too long (255 characters is a common limit)
+    if (cleanedName.length > 255) {
+      return { 
+        isValid: false, 
+        message: "File name is too long (max 255 characters)" 
+      };
+    }
+
+    return { isValid: true };
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      
+      // Validate file name first
+      const validation = validateFileName(file.name);
+      if (!validation.isValid) {
+        toast({
+          title: "Invalid file name",
+          description: validation.message,
+          variant: "destructive",
+        });
+        return;
+      }
       
       const fileName = file.name.toLowerCase();
       const extension = fileName.split('.').pop() || '';
@@ -412,7 +455,13 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      formData.append("path", currentPath);
+      
+      // Clean the path by removing leading/trailing slashes and any double slashes
+      const cleanPath = currentPath
+        .replace(/^\/+|\/+$/g, '')  // Remove leading/trailing slashes
+        .replace(/\/+/g, '/');      // Replace multiple slashes with single
+      
+      formData.append("path", cleanPath);
       
       const result = await uploadFile(formData);
       
@@ -423,8 +472,9 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
           variant: "default",
         });
         
-        const filePath = currentPath 
-          ? `${currentPath}/${selectedFile.name}` 
+        // Use cleaned path for filePath construction
+        const filePath = cleanPath 
+          ? `${cleanPath}/${selectedFile.name}` 
           : selectedFile.name;
         
         try {
@@ -466,8 +516,14 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     }
     
     const readmeContent = `# ${newFolderName}\n\nThis folder was created with GitHub File Uploader.`;
-    const folderPath = currentPath 
-      ? `${currentPath}/${newFolderName}` 
+    
+    // Clean the current path first
+    const cleanCurrentPath = currentPath
+      .replace(/^\/+|\/+$/g, '')  // Remove leading/trailing slashes
+      .replace(/\/+/g, '/');      // Replace multiple slashes with single
+    
+    const folderPath = cleanCurrentPath 
+      ? `${cleanCurrentPath}/${newFolderName}` 
       : newFolderName;
     
     setIsCreatingFolder(true);
