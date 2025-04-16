@@ -500,7 +500,7 @@ export default function Home() {
           </div>
           
           <div className="border-t border-white/10 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p className="font-body">© 2023 EduNotes. All rights reserved.</p>
+            <p className="font-body">© 2025 EduNotes. All rights reserved.</p>
             <div className="mt-4 md:mt-0 flex space-x-6 font-body">
               <Link href="#" className="hover:text-white transition">Twitter</Link>
               <Link href="#" className="hover:text-white transition">LinkedIn</Link>

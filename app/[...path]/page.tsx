@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
-import DriveInterface from "@/components/drive-interface";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
+import ClientDriveInterface from "./client-drive";
 
 interface PathPageProps {
   params: {
@@ -9,11 +9,10 @@ interface PathPageProps {
   };
 }
 
-// Server component to await params
-export default async function PathPage({ params }: PathPageProps) {
-  // Properly await params
-  const path = await params.path;
-  const pathString = path.join('/');
+// Server component (no "use client" directive)
+export default function PathPage({ params }: PathPageProps) {
+  // In a server component, we need to handle params safely
+  const pathString = Array.isArray(params.path) ? params.path.join('/') : '';
 
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-10">
@@ -36,10 +35,4 @@ export default async function PathPage({ params }: PathPageProps) {
       <Toaster />
     </main>
   );
-}
-
-// Client component wrapper
-"use client";
-function ClientDriveInterface({ initialPath }: { initialPath: string }) {
-  return <DriveInterface initialPath={initialPath} />;
 } 

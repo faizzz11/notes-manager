@@ -403,7 +403,7 @@ export default function SubjectsPage() {
           </div>
 
           <div className="border-t border-white/10 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p>© 2023 EduNotes. All rights reserved.</p>
+            <p>© 2025 EduNotes. All rights reserved.</p>
             <div className="mt-4 md:mt-0 flex space-x-6">
               <Link href="#" className="hover:text-white transition">
                 Twitter
