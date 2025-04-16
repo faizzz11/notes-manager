@@ -21,6 +21,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   UploadIcon,
   FolderIcon,
   FileIcon,
@@ -30,6 +40,7 @@ import {
   FolderPlusIcon,
   ImageIcon,
   VideoIcon,
+  Trash2,
 } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 
@@ -86,6 +97,9 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [videoFileName, setVideoFileName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [itemToDelete, setItemToDelete] = useState<ItemType | null>(null);
   
   const router = useRouter();
   const { toast } = useToast();
@@ -632,6 +646,107 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     return <FileIcon className={`${className} text-gray-500`} />;
   };
 
+  const handleDelete = async (item: ItemType) => {
+    setItemToDelete(item);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN || '';
+      const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || 'kstubhieeee/files';
+      
+      if (itemToDelete.type === 'dir') {
+        // For folders, we need to delete all contents first
+        const response = await fetch(`https://api.github.com/repos/${repo}/contents/${itemToDelete.path}`, {
+          headers: {
+            Authorization: `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to get folder contents: ${response.status}`);
+        }
+
+        const contents = await response.json();
+        
+        // Delete all files in the folder
+        for (const item of contents) {
+          const deleteResponse = await fetch(`https://api.github.com/repos/${repo}/contents/${item.path}`, {
+            method: 'DELETE',
+            headers: {
+              Authorization: `token ${token}`,
+              'Accept': 'application/vnd.github.v3+json'
+            },
+            body: JSON.stringify({
+              message: `Delete file: ${item.name}`,
+              sha: item.sha
+            })
+          });
+
+          if (!deleteResponse.ok) {
+            throw new Error(`Failed to delete file ${item.name}: ${deleteResponse.status}`);
+          }
+        }
+      } else {
+        // For files, get the SHA first
+        const response = await fetch(`https://api.github.com/repos/${repo}/contents/${itemToDelete.path}`, {
+          headers: {
+            Authorization: `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to get file info: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Delete the file
+        const deleteResponse = await fetch(`https://api.github.com/repos/${repo}/contents/${itemToDelete.path}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          body: JSON.stringify({
+            message: `Delete file: ${itemToDelete.name}`,
+            sha: data.sha
+          })
+        });
+        
+        if (!deleteResponse.ok) {
+          throw new Error(`Failed to delete file: ${deleteResponse.status}`);
+        }
+      }
+      
+      toast({
+        title: "Success",
+        description: `${itemToDelete.type === 'dir' ? 'Folder' : 'File'} deleted successfully`,
+        variant: "default",
+      });
+      
+      // Refresh the current directory
+      fetchItems(currentPath);
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      toast({
+        title: "Error",
+        description: `Failed to delete ${itemToDelete.type === 'dir' ? 'folder' : 'file'}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
+    }
+  };
+
   return (
     <>
       <Card className="w-full border-none shadow-none">
@@ -768,7 +883,7 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
                 {items.map((item) => (
                   <div
                     key={item.path}
-                    className="flex items-center p-3 rounded-md hover:bg-secondary/30 cursor-pointer"
+                    className="group flex items-center p-3 rounded-md hover:bg-secondary/30 cursor-pointer relative"
                     onClick={() => handleItemClick(item)}
                   >
                     {item.type === "dir" ? (
@@ -782,6 +897,17 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
                         </span>
                       )}
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(item);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -818,6 +944,38 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
         url={videoUrl}
         fileName={videoFileName}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {itemToDelete?.type === 'dir' ? 'the folder' : 'the file'} "{itemToDelete?.name}".
+              {itemToDelete?.type === 'dir' && ' This action cannot be undone and will delete all contents within the folder.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 } 
