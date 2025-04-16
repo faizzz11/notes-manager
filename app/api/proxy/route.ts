@@ -3,11 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic'; // Disable caching for this route
 
 export async function GET(request: NextRequest) {
+  console.log('Proxy route received request:', request.method, request.url);
+  
   // Get the URL to proxy from the query parameter
   const searchParams = request.nextUrl.searchParams;
   const url = searchParams.get('url');
 
   if (!url) {
+    console.error('No URL parameter provided');
     return NextResponse.json(
       { error: 'URL parameter is required' },
       { status: 400 }
@@ -19,6 +22,7 @@ export async function GET(request: NextRequest) {
     
     // Fetch the requested resource
     const response = await fetch(url, {
+      method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 GitHub File Manager Proxy',
         'Accept': '*/*',
@@ -26,10 +30,11 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
       },
-      // Add cache: 'no-store' to prevent caching
       cache: 'no-store',
     });
 
+    console.log('GitHub response status:', response.status);
+    
     if (!response.ok) {
       console.error(`Proxy fetch failed: ${response.status} ${response.statusText} for URL: ${url}`);
       return NextResponse.json(
@@ -40,6 +45,8 @@ export async function GET(request: NextRequest) {
 
     // Get the content type and other relevant headers from the response
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    console.log('Content type:', contentType);
+    
     const contentDisposition = response.headers.get('content-disposition');
     const contentLength = response.headers.get('content-length');
     
@@ -59,20 +66,39 @@ export async function GET(request: NextRequest) {
     if (contentDisposition) headers.set('Content-Disposition', contentDisposition);
     if (contentLength) headers.set('Content-Length', contentLength);
     
-    // For PDF files, add additional headers to help browsers render them properly
-    if (contentType.includes('application/pdf') || url.toLowerCase().endsWith('.pdf')) {
+    // Handle different content types appropriately
+    if (contentType.includes('text/') || 
+        contentType.includes('application/json') || 
+        contentType.includes('application/javascript') ||
+        url.toLowerCase().endsWith('.md') ||
+        url.toLowerCase().endsWith('.markdown')) {
+      // For text-based content, use text()
+      const text = await response.text();
+      headers.set('Content-Type', 'text/plain; charset=utf-8');
+      console.log('Returning text response');
+      return new NextResponse(text, {
+        status: 200,
+        headers,
+      });
+    } else if (contentType.includes('application/pdf') || url.toLowerCase().endsWith('.pdf')) {
+      // For PDF files, add additional headers
       headers.set('Content-Type', 'application/pdf');
       headers.set('Accept-Ranges', 'bytes');
+      const arrayBuffer = await response.arrayBuffer();
+      console.log('Returning PDF response');
+      return new NextResponse(arrayBuffer, {
+        status: 200,
+        headers,
+      });
+    } else {
+      // For all other content types, use arrayBuffer
+      const arrayBuffer = await response.arrayBuffer();
+      console.log('Returning binary response');
+      return new NextResponse(arrayBuffer, {
+        status: 200,
+        headers,
+      });
     }
-    
-    // Get the file content as array buffer for binary data
-    const arrayBuffer = await response.arrayBuffer();
-    
-    // Return the proxied response with appropriate headers
-    return new NextResponse(arrayBuffer, {
-      status: 200,
-      headers,
-    });
   } catch (error) {
     console.error('Proxy error:', error);
     
@@ -85,6 +111,7 @@ export async function GET(request: NextRequest) {
 
 // Handle OPTIONS requests for CORS preflight
 export async function OPTIONS(request: NextRequest) {
+  console.log('Handling OPTIONS request');
   return new NextResponse(null, {
     status: 200,
     headers: {

@@ -2,21 +2,23 @@ interface UploadFileParams {
   fileName: string;
   content: string;
   fileType: string;
+  path?: string;
 }
 
 export async function uploadFileToGithub({
   fileName,
   content,
   fileType,
+  path = '',
 }: UploadFileParams): Promise<{ success: boolean; message: string; url?: string }> {
   try {
     const token = process.env.GITHUB_TOKEN;
-    const repo = process.env.GITHUB_REPO;
+    const repo = process.env.GITHUB_REPO || 'kstubhieeee/files';
     
-    if (!token || !repo) {
+    if (!token) {
       return {
         success: false,
-        message: "GitHub configuration is missing",
+        message: "GitHub token is missing",
       };
     }
 
@@ -28,6 +30,7 @@ export async function uploadFileToGithub({
     // Log size information for debugging
     console.log('File upload details:', {
       fileName,
+      path,
       sizeMB: contentSizeMB.toFixed(2),
       fileType
     });
@@ -41,8 +44,8 @@ export async function uploadFileToGithub({
     }
     
     // Format the path for the GitHub API
-    // Don't modify the path if it already includes directories
-    const path = fileName;
+    // If path is provided, prepend it to the filename
+    const fullPath = path ? `${path}/${fileName}` : fileName;
     
     // Use a larger timeout for bigger files
     const timeoutMs = Math.max(60000, contentSizeMB * 1000); // At least 60 seconds
@@ -51,11 +54,12 @@ export async function uploadFileToGithub({
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     
     try {
-      const response = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+      const response = await fetch(`https://api.github.com/repos/${repo}/contents/${fullPath}`, {
         method: 'PUT',
         headers: {
           Authorization: `token ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json',
         },
         body: JSON.stringify({
           message: `Upload ${fileName}`,
@@ -84,6 +88,20 @@ export async function uploadFileToGithub({
           return {
             success: false,
             message: 'File is too large for GitHub. Maximum file size is 100MB.',
+          };
+        }
+        
+        if (response.status === 409) {
+          return {
+            success: false,
+            message: 'A file with this name already exists in the specified location.',
+          };
+        }
+        
+        if (response.status === 404) {
+          return {
+            success: false,
+            message: 'The specified path does not exist in the repository.',
           };
         }
         

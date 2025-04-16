@@ -7,7 +7,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ReadmeViewer } from "@/components/readme-viewer";
 import { MediaViewer } from "@/components/media-viewer";
 import { PDFViewer } from "@/components/pdf-viewer";
 import { MarkdownViewer } from "@/components/markdown-viewer";
@@ -86,6 +85,7 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
   const [videoOpen, setVideoOpen] = useState<boolean>(false);
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [videoFileName, setVideoFileName] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
   
   const router = useRouter();
   const { toast } = useToast();
@@ -100,60 +100,41 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
 
   // Fetch content from GitHub when the current path changes
   useEffect(() => {
-    fetchItems();
+    fetchItems(currentPath);
   }, [currentPath]);
 
   // Poll for newly created folder
   useEffect(() => {
     if (createdFolderPath && pollCount < 10) {
       const checkForFolder = async () => {
-        // Only show loading UI if absolutely necessary - removed early loading indicator
         if (pollCount > 6) {
           setIsLoading(true);
         }
         
         try {
-          // Get the parent path of the created folder
           const pathParts = createdFolderPath.split('/');
           const folderName = pathParts.pop() || '';
           const parentPath = pathParts.join('/');
           
-          // Fetch the parent directory
           const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN || '';
           const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || 'kstubhieeee/files';
           const path = parentPath ? `/${parentPath}` : '';
           
-          // Create headers - only include auth if token exists and is valid
-          const headers: HeadersInit = {
-            'Accept': 'application/vnd.github.v3+json'
-          };
-          
-          if (token && token.length > 10) {
-            headers.Authorization = `token ${token}`;
-          }
-          
-          // Try with token first (if available)
-          let response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
-            headers
+          const response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
+            headers: {
+              Authorization: `token ${token}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
           });
-          
-          // If failed with token, try without token for public repos
-          if (!response.ok && token) {
-            response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
-              headers: { 'Accept': 'application/vnd.github.v3+json' }
-            });
-          }
           
           if (response.ok) {
             const data = await response.json();
             
-            // Check if our folder exists
             const folderExists = Array.isArray(data) && data.some(
               item => item.type === 'dir' && item.name === folderName
             );
             
             if (folderExists) {
-              // Folder found! Navigate to it
               setCreatedFolderPath(null);
               setPollCount(0);
               navigateToPath(createdFolderPath);
@@ -161,18 +142,15 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
             }
           }
           
-          // Folder not found yet, continue polling
           setPollCount(prev => prev + 1);
           
           if (pollCount < 9) {
-            // Exponential backoff for polling
             const delay = Math.min(1000 * Math.pow(1.5, pollCount), 10000);
             setTimeout(checkForFolder, delay);
           } else {
-            // Give up after 10 attempts
             setCreatedFolderPath(null);
             setPollCount(0);
-            fetchItems(); // Refresh items
+            fetchItems(currentPath);
             toast({
               title: "Note",
               description: "Folder created. It may take a moment to appear.",
@@ -193,76 +171,54 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     }
   }, [createdFolderPath, pollCount]);
 
-  // Poll for newly uploaded file with minimized loading indicators
+  // Poll for newly uploaded file
   useEffect(() => {
     if (uploadedFilePath && uploadPollCount < 10) {
       const checkForFile = async () => {
-        // Only show loading UI if absolutely necessary - removed early loading indicator
         if (uploadPollCount > 6) {
           setIsLoading(true);
         }
         
         try {
-          // Get the directory path and filename
           const pathParts = uploadedFilePath.split('/');
           const fileName = pathParts.pop() || '';
           const dirPath = pathParts.join('/');
           
-          // Fetch the directory
           const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN || '';
           const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || 'kstubhieeee/files';
           const path = dirPath ? `/${dirPath}` : '';
           
-          // Create headers - only include auth if token exists and is valid
-          const headers: HeadersInit = {
-            'Accept': 'application/vnd.github.v3+json'
-          };
-          
-          if (token && token.length > 10) {
-            headers.Authorization = `token ${token}`;
-          }
-          
-          // Try with token first (if available)
-          let response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
-            headers
+          const response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
+            headers: {
+              Authorization: `token ${token}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
           });
-          
-          // If failed with token, try without token for public repos
-          if (!response.ok && token) {
-            response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
-              headers: { 'Accept': 'application/vnd.github.v3+json' }
-            });
-          }
           
           if (response.ok) {
             const data = await response.json();
             
-            // Check if our file exists
             const fileExists = Array.isArray(data) && data.some(
               item => item.type === 'file' && item.name === fileName
             );
             
             if (fileExists) {
-              // File found! Refresh the directory
               setUploadedFilePath(null);
               setUploadPollCount(0);
-              fetchItems();
+              fetchItems(currentPath);
               return;
             }
           }
           
-          // File not found yet, continue polling
           setUploadPollCount(prev => prev + 1);
           
           if (uploadPollCount < 9) {
-            // Exponential backoff for polling
             const delay = Math.min(1000 * Math.pow(1.5, uploadPollCount), 5000);
             setTimeout(checkForFile, delay);
           } else {
-            // Give up after 10 attempts
             setUploadedFilePath(null);
             setUploadPollCount(0);
-            fetchItems(); // Refresh items
+            fetchItems(currentPath);
             toast({
               title: "Note",
               description: "File uploaded. It may take a moment to appear.",
@@ -283,114 +239,31 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     }
   }, [uploadedFilePath, uploadPollCount]);
 
-  const fetchItems = async () => {
+  const fetchItems = async (path: string) => {
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // Get repository information - set a default that exists as a fallback
-      const defaultRepo = 'bradtraversy/50projects50days';
-      const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || defaultRepo;
-      const path = currentPath ? `/${currentPath}` : '';
       const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN || '';
-      
-      // Create fetch URL and headers
-      const apiUrl = `https://api.github.com/repos/${repo}/contents${path}`;
-      console.log(`Fetching from: ${apiUrl}`);
-      
-      // Prepare headers - only include auth if token exists
-      const headers: HeadersInit = {
-        'Accept': 'application/vnd.github.v3+json'
-      };
-      
-      if (token && token.length > 10) { // Simple validation to avoid adding invalid tokens
-        headers.Authorization = `token ${token}`;
-      }
-      
-      // First attempt with token (if available)
-      let response;
-      try {
-        response = await fetch(apiUrl, { headers });
-      } catch (fetchError) {
-        console.error('Network error fetching from GitHub:', fetchError);
-        toast({
-          title: "Network Error",
-          description: "Failed to connect to GitHub API. Please check your internet connection.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
-      }
-      
-      // If failed with token, try again without token for public repos
-      if (!response.ok && token) {
-        console.log('Retry without token for public repository');
-        try {
-          response = await fetch(apiUrl, { 
-            headers: { 'Accept': 'application/vnd.github.v3+json' } 
-          });
-        } catch (retryError) {
-          console.error('Network error on retry:', retryError);
+      const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || 'kstubhieeee/files';
+      const response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
+        headers: {
+          Authorization: `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
         }
-      }
+      });
       
-      // Handle various error cases
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('GitHub API Error:', response.status, errorText);
-        
         if (response.status === 404) {
-          // Repository or path doesn't exist
           setItems([]);
-          toast({
-            title: "Repository or Path Not Found",
-            description: `The repository "${repo}" or path "${path}" could not be found. Using demo data instead.`,
-            variant: "destructive",
-          });
-          
-          // Set some demo items as fallback
-          const demoItems = [
-            { name: 'Example Folder', path: 'example-folder', type: 'dir' },
-            { 
-              name: 'README.md', 
-              path: 'README.md', 
-              type: 'file',
-              html_url: 'https://github.com/bradtraversy/50projects50days/blob/master/README.md',
-              size: 1024
-            },
-            { 
-              name: 'sample-image.jpg', 
-              path: 'sample-image.jpg', 
-              type: 'file', 
-              html_url: 'https://source.unsplash.com/random/800x600',
-              size: 4096
-            }
-          ];
-          setItems(demoItems);
           setIsLoading(false);
           return;
         }
-        
-        if (response.status === 401) {
-          toast({
-            title: "Authentication Error",
-            description: "Your GitHub token has expired or is invalid. Please update your token.",
-            variant: "destructive",
-          });
-          throw new Error('GitHub token is invalid or has expired');
-        }
-        
-        if (response.status === 403) {
-          if (response.headers.get('X-RateLimit-Remaining') === '0') {
-            throw new Error('GitHub API rate limit exceeded. Please try again later or use a token.');
-          }
-          throw new Error('Access forbidden. This may be a private repository that requires authentication.');
-        }
-        
-        throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+        throw new Error('Failed to fetch repository contents');
       }
       
       const data = await response.json();
       
-      // Sort items: folders first, then files
       const sortedItems = Array.isArray(data) 
         ? data.sort((a, b) => {
             if (a.type === 'dir' && b.type !== 'dir') return -1;
@@ -399,35 +272,36 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
           })
         : [];
       
-      setItems(sortedItems);
-    } catch (error) {
-      console.error('Error fetching items:', error);
-      toast({
-        title: "Error Loading Contents",
-        description: error instanceof Error ? error.message : "Failed to load files and folders",
-        variant: "destructive",
-      });
+      // Filter out README.md files from the display
+      const filteredItems = sortedItems.filter(item => 
+        item.type === 'dir' || 
+        (item.type === 'file' && !item.name.toLowerCase().includes('readme.md'))
+      );
+      
+      setItems(filteredItems);
+    } catch (err) {
+      console.error("Error fetching items:", err);
+      setError("Failed to load items");
+      // Navigate to root on error
+      router.push('/notes');
     } finally {
       setIsLoading(false);
     }
   };
 
   const navigateToPath = (path: string) => {
-    // Update URL to match the current path
-    if (path) {
-      router.push(`/${path}`);
+    // Only navigate if the path is a directory
+    if (path && !path.includes('.')) {
+      router.push(`/notes/${path}`);
     } else {
-      router.push('/');
+      router.push('/notes');
     }
     
-    // Update the path history for back navigation
     if (path !== currentPath) {
       const newHistory = [...pathHistory];
-      // If we're not going back, add the current path to history
       if (!pathHistory.includes(path)) {
         newHistory.push(path);
       } else {
-        // If we're going back, trim the history
         const index = pathHistory.indexOf(path);
         newHistory.splice(index + 1);
       }
@@ -437,10 +311,10 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
   };
 
   const navigateToParentFolder = () => {
-    if (currentPath === '') return; // Already at root
+    if (currentPath === '') return;
     
     const pathParts = currentPath.split('/');
-    pathParts.pop(); // Remove the last part
+    pathParts.pop();
     const parentPath = pathParts.join('/');
     navigateToPath(parentPath);
   };
@@ -452,39 +326,24 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
       const fileItem = item as FileItem;
       const extension = item.name.split('.').pop()?.toLowerCase() || '';
       
-      // For README.md files, show the markdown viewer
-      if (item.name.toLowerCase() === 'readme.md') {
-        setReadmeUrl(fileItem.html_url);
-        setReadmeFileName(item.name);
-        setReadmeOpen(true);
-      } 
-      // For PDF files, use the dedicated PDF viewer
-      else if (extension === 'pdf') {
-        setPdfUrl(fileItem.html_url);
-        setPdfFileName(item.name);
-        setPdfOpen(true);
-      }
-      // For Markdown files (other than README), use dedicated Markdown viewer
-      else if (['md', 'markdown'].includes(extension) && item.name.toLowerCase() !== 'readme.md') {
+      if (['md', 'markdown'].includes(extension) || item.name.toLowerCase() === 'readme.md') {
         setMarkdownUrl(fileItem.html_url);
         setMarkdownFileName(item.name);
         setMarkdownOpen(true);
-      }
-      // For image files, show the image viewer
-      else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(extension)) {
+      } else if (extension === 'pdf') {
+        setPdfUrl(fileItem.html_url);
+        setPdfFileName(item.name);
+        setPdfOpen(true);
+      } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(extension)) {
         setMediaUrl(fileItem.html_url);
         setMediaFileName(item.name);
         setMediaType("image");
         setMediaOpen(true);
-      } 
-      // For video files, show the dedicated video viewer instead of MediaViewer
-      else if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(extension)) {
+      } else if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(extension)) {
         setVideoUrl(fileItem.html_url);
         setVideoFileName(item.name);
         setVideoOpen(true);
-      } 
-      // For other files, open in new tab
-      else {
+      } else {
         window.open(fileItem.html_url, '_blank');
       }
     }
@@ -494,20 +353,17 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Check file extension for more reliable type detection
       const fileName = file.name.toLowerCase();
       const extension = fileName.split('.').pop() || '';
       
-      // Helper function to check if a string contains another string
       const contains = (str: string, search: string) => str.indexOf(search) !== -1;
       
-      // Check if it's a supported file type
       const isReadme = fileName === 'readme.md';
       const isPdf = file.type === "application/pdf" || extension === 'pdf';
       const isMarkdown = file.type === "text/markdown" || 
                         file.type === "text/x-markdown" || 
                         contains(file.type, 'markdown') ||
-                        file.type === "text/plain" ||  // Some browsers might send md files as plain text
+                        file.type === "text/plain" ||
                         extension === 'md' || 
                         extension === 'markdown';
       const isImage = file.type.startsWith("image/") || 
@@ -515,7 +371,6 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
       const isVideo = file.type.startsWith("video/") || 
                      ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(extension);
       
-      // Format file size for display
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       
       console.log('File selected:', {
@@ -529,7 +384,6 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
         isVideo
       });
       
-      // Check file size - GitHub has a 100MB limit
       if (file.size > 100 * 1024 * 1024) {
         toast({
           title: "File too large",
@@ -558,8 +412,6 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      
-      // Add current path to formData
       formData.append("path", currentPath);
       
       const result = await uploadFile(formData);
@@ -571,21 +423,18 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
           variant: "default",
         });
         
-        // Track the uploaded file but don't show immediate loading indicator
         const filePath = currentPath 
           ? `${currentPath}/${selectedFile.name}` 
           : selectedFile.name;
         
-        // Try a silent fetch first
         try {
-          await fetchItems();
+          await fetchItems(currentPath);
         } catch (e) {
           console.log("Initial refresh failed, will poll for file silently");
           setUploadedFilePath(filePath);
           setUploadPollCount(0);
         }
         
-        // Close dialog and reset
         setUploadDialogOpen(false);
         setSelectedFile(null);
       } else {
@@ -616,7 +465,6 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
       return;
     }
     
-    // Create README.md file in the new folder
     const readmeContent = `# ${newFolderName}\n\nThis folder was created with GitHub File Uploader.`;
     const folderPath = currentPath 
       ? `${currentPath}/${newFolderName}` 
@@ -624,7 +472,6 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     
     setIsCreatingFolder(true);
     try {
-      // Create a README.md file in the new folder
       const formData = new FormData();
       const readmeFile = new File(
         [readmeContent], 
@@ -643,11 +490,9 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
           variant: "default",
         });
         
-        // Start polling for the folder, but don't show immediate loading state
         setCreatedFolderPath(folderPath);
         setPollCount(0);
         
-        // Close dialog and reset form
         setCreateFolderOpen(false);
         setNewFolderName("");
       } else {
@@ -712,27 +557,22 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
   const getFileIcon = (fileName: string, className: string) => {
     const extension = fileName.split('.').pop()?.toLowerCase() || '';
     
-    // Image files
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(extension)) {
       return <ImageIcon className={`${className} text-purple-500`} />;
     }
     
-    // Video files
     if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(extension)) {
       return <VideoIcon className={`${className} text-pink-500`} />;
     }
     
-    // PDF files
     if (extension === 'pdf') {
       return <FileIcon className={`${className} text-red-500`} />;
     }
     
-    // Markdown files
     if (['md', 'markdown'].includes(extension)) {
       return <FileTextIcon className={`${className} text-green-500`} />;
     }
     
-    // Default file icon
     return <FileIcon className={`${className} text-gray-500`} />;
   };
 
@@ -740,7 +580,7 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     <>
       <Card className="w-full border-none shadow-none">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Files</h2>
+          <h2 className="text-xl font-semibold">Notes</h2>
           <div className="flex gap-2">
             <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
               <DialogTrigger asChild>
@@ -894,13 +734,6 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
         )}
       </Card>
       
-      <ReadmeViewer 
-        isOpen={readmeOpen} 
-        onOpenChange={setReadmeOpen}
-        url={readmeUrl}
-        fileName={readmeFileName}
-      />
-
       <MediaViewer
         isOpen={mediaOpen}
         onOpenChange={setMediaOpen}
