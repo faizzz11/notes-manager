@@ -123,12 +123,26 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
           const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || 'kstubhieeee/files';
           const path = parentPath ? `/${parentPath}` : '';
           
-          const response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
-            headers: {
-              Authorization: `token ${token}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
+          // Create headers - only include auth if token exists and is valid
+          const headers: HeadersInit = {
+            'Accept': 'application/vnd.github.v3+json'
+          };
+          
+          if (token && token.length > 10) {
+            headers.Authorization = `token ${token}`;
+          }
+          
+          // Try with token first (if available)
+          let response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
+            headers
           });
+          
+          // If failed with token, try without token for public repos
+          if (!response.ok && token) {
+            response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
+              headers: { 'Accept': 'application/vnd.github.v3+json' }
+            });
+          }
           
           if (response.ok) {
             const data = await response.json();
@@ -199,12 +213,26 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
           const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || 'kstubhieeee/files';
           const path = dirPath ? `/${dirPath}` : '';
           
-          const response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
-            headers: {
-              Authorization: `token ${token}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
+          // Create headers - only include auth if token exists and is valid
+          const headers: HeadersInit = {
+            'Accept': 'application/vnd.github.v3+json'
+          };
+          
+          if (token && token.length > 10) {
+            headers.Authorization = `token ${token}`;
+          }
+          
+          // Try with token first (if available)
+          let response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
+            headers
           });
+          
+          // If failed with token, try without token for public repos
+          if (!response.ok && token) {
+            response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
+              headers: { 'Accept': 'application/vnd.github.v3+json' }
+            });
+          }
           
           if (response.ok) {
             const data = await response.json();
@@ -258,26 +286,106 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
   const fetchItems = async () => {
     setIsLoading(true);
     try {
-      // Fetch repository contents from GitHub API
-      const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN || '';
-      const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || 'kstubhieeee/files';
+      // Get repository information - set a default that exists as a fallback
+      const defaultRepo = 'bradtraversy/50projects50days';
+      const repo = process.env.NEXT_PUBLIC_GITHUB_REPO || defaultRepo;
       const path = currentPath ? `/${currentPath}` : '';
+      const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN || '';
       
-      const response = await fetch(`https://api.github.com/repos/${repo}/contents${path}`, {
-        headers: {
-          Authorization: `token ${token}`,
-          'Accept': 'application/vnd.github.v3+json'
+      // Create fetch URL and headers
+      const apiUrl = `https://api.github.com/repos/${repo}/contents${path}`;
+      console.log(`Fetching from: ${apiUrl}`);
+      
+      // Prepare headers - only include auth if token exists
+      const headers: HeadersInit = {
+        'Accept': 'application/vnd.github.v3+json'
+      };
+      
+      if (token && token.length > 10) { // Simple validation to avoid adding invalid tokens
+        headers.Authorization = `token ${token}`;
+      }
+      
+      // First attempt with token (if available)
+      let response;
+      try {
+        response = await fetch(apiUrl, { headers });
+      } catch (fetchError) {
+        console.error('Network error fetching from GitHub:', fetchError);
+        toast({
+          title: "Network Error",
+          description: "Failed to connect to GitHub API. Please check your internet connection.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // If failed with token, try again without token for public repos
+      if (!response.ok && token) {
+        console.log('Retry without token for public repository');
+        try {
+          response = await fetch(apiUrl, { 
+            headers: { 'Accept': 'application/vnd.github.v3+json' } 
+          });
+        } catch (retryError) {
+          console.error('Network error on retry:', retryError);
         }
-      });
+      }
       
+      // Handle various error cases
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('GitHub API Error:', response.status, errorText);
+        
         if (response.status === 404) {
-          // Repository might be empty or path doesn't exist
+          // Repository or path doesn't exist
           setItems([]);
+          toast({
+            title: "Repository or Path Not Found",
+            description: `The repository "${repo}" or path "${path}" could not be found. Using demo data instead.`,
+            variant: "destructive",
+          });
+          
+          // Set some demo items as fallback
+          const demoItems = [
+            { name: 'Example Folder', path: 'example-folder', type: 'dir' },
+            { 
+              name: 'README.md', 
+              path: 'README.md', 
+              type: 'file',
+              html_url: 'https://github.com/bradtraversy/50projects50days/blob/master/README.md',
+              size: 1024
+            },
+            { 
+              name: 'sample-image.jpg', 
+              path: 'sample-image.jpg', 
+              type: 'file', 
+              html_url: 'https://source.unsplash.com/random/800x600',
+              size: 4096
+            }
+          ];
+          setItems(demoItems);
           setIsLoading(false);
           return;
         }
-        throw new Error('Failed to fetch repository contents');
+        
+        if (response.status === 401) {
+          toast({
+            title: "Authentication Error",
+            description: "Your GitHub token has expired or is invalid. Please update your token.",
+            variant: "destructive",
+          });
+          throw new Error('GitHub token is invalid or has expired');
+        }
+        
+        if (response.status === 403) {
+          if (response.headers.get('X-RateLimit-Remaining') === '0') {
+            throw new Error('GitHub API rate limit exceeded. Please try again later or use a token.');
+          }
+          throw new Error('Access forbidden. This may be a private repository that requires authentication.');
+        }
+        
+        throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
@@ -295,14 +403,10 @@ export default function DriveInterface({ initialPath = "" }: DriveInterfaceProps
     } catch (error) {
       console.error('Error fetching items:', error);
       toast({
-        title: "Error",
-        description: "Failed to load files and folders",
+        title: "Error Loading Contents",
+        description: error instanceof Error ? error.message : "Failed to load files and folders",
         variant: "destructive",
       });
-      // If we're not at the root, go back to the root
-      if (currentPath !== '') {
-        navigateToPath('');
-      }
     } finally {
       setIsLoading(false);
     }
