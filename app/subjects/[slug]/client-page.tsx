@@ -503,68 +503,74 @@ export default function SubjectPageClient({ slug }: SubjectPageClientProps) {
           {/* Content Area */}
           <div className="md:w-2/3 lg:w-3/4">
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight">{subject.title}</h1>
-                  <p className="text-muted-foreground">{subject.description}</p>
-                </div>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Content
-                </Button>
-              </div>
-
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <TabsList>
-                    <TabsTrigger value="notes">Notes</TabsTrigger>
-                    <TabsTrigger value="flashcards">Flashcards</TabsTrigger>
-                    <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
-                  </TabsList>
-                  <Input
-                    placeholder="Search..."
-                    className="max-w-xs"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-
-                <TabsContent value="notes" className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {subject.notes.map((note) => (
-                      <Card key={note.id}>
-                        <CardHeader className="pb-2">
-                          <CardTitle>{note.title}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground">{note.content}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
+              {selectedTopic ? (
+                <Topic topic={selectedTopic} />
+              ) : (
+                <>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h1 className="text-3xl font-bold tracking-tight">{subject.title}</h1>
+                      <p className="text-muted-foreground">{subject.description}</p>
+                    </div>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Content
+                    </Button>
                   </div>
-                </TabsContent>
 
-                <TabsContent value="flashcards" className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {subject.flashcards.map((card) => (
-                      <Card key={card.id}>
-                        <CardHeader className="pb-2">
-                          <CardTitle>{card.question}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground">{card.answer}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </TabsContent>
+                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <div className="flex justify-between items-center mb-4">
+                      <TabsList>
+                        <TabsTrigger value="notes">Notes</TabsTrigger>
+                        <TabsTrigger value="flashcards">Flashcards</TabsTrigger>
+                        <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
+                      </TabsList>
+                      <Input
+                        placeholder="Search..."
+                        className="max-w-xs"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
 
-                <TabsContent value="quizzes" className="space-y-4">
-                  <div className="flex justify-center items-center h-40">
-                    <p className="text-muted-foreground">No quizzes available yet</p>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                    <TabsContent value="notes" className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {subject.notes.map((note) => (
+                          <Card key={note.id}>
+                            <CardHeader className="pb-2">
+                              <CardTitle>{note.title}</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-sm text-muted-foreground">{note.content}</p>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="flashcards" className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {subject.flashcards.map((card) => (
+                          <Card key={card.id}>
+                            <CardHeader className="pb-2">
+                              <CardTitle>{card.question}</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-sm text-muted-foreground">{card.answer}</p>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="quizzes" className="space-y-4">
+                      <div className="flex justify-center items-center h-40">
+                        <p className="text-muted-foreground">No quizzes available yet</p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </>
+              )}
             </div>
           </div>
         </div>
