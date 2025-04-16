@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Poppins, Playfair_Display } from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Define fonts
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const poppins = Poppins({ 
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin"],
+  variable: "--font-poppins"
 });
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const playfair = Playfair_Display({ 
   subsets: ["latin"],
+  variable: "--font-playfair"
 });
 
 export const metadata: Metadata = {
-  title: "GitHub File Uploader",
-  description: "Upload PDF and Markdown files to GitHub",
+  title: "EduNotes - Engineering Learning Platform",
+  description: "Access top-tier notes, important questions, and expert videos for all engineering subjects.",
 };
 
 export default function RootLayout({
@@ -23,10 +26,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="en">
+      <body className={cn(
+        inter.variable,
+        poppins.variable,
+        playfair.variable,
+        "font-sans"
+      )}>
         {children}
       </body>
     </html>
